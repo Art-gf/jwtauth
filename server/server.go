@@ -1,7 +1,6 @@
 package main
 
 import (
-	//"afg/jwtauth/service"
 	"afg/jwtauth/service"
 	"log"
 	"net/http"
@@ -10,32 +9,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var (
-	router = gin.Default()
-)
-
 type User struct {
-	ID       uint64 `json:"id"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	GUID uint64 `json:"guid"`
 }
 
-var user = User{
-	ID:       1,
-	Username: "username",
-	Password: "password",
-}
+var user = User{GUID: 1}
 
-func Login(c *gin.Context) {
+func Authorize(c *gin.Context) {
 	var u User
-
 	if err := c.ShouldBindJSON(&u); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, "Invalid json provided")
 		return
 	}
-	//compare the user from the request, with the one we defined:
-	if user.Username != u.Username || user.Password != u.Password {
-		c.JSON(http.StatusUnauthorized, "Please provide valid login details")
+	if user.GUID != u.GUID {
+		c.JSON(http.StatusUnauthorized, "This user not found")
 		return
 	}
 
@@ -47,7 +34,13 @@ func Login(c *gin.Context) {
 	c.JSON(http.StatusOK, token)
 }
 
+func Refresh(c *gin.Context) {
+	c.JSON(http.StatusOK, "u absolutely moron")
+}
+
 func main() {
-	router.POST("/login", Login)
+	router := gin.Default()
+	router.POST("/authorize", Authorize)
+	router.GET("/refresh", Refresh)
 	log.Fatal(router.Run(":8080"))
 }
