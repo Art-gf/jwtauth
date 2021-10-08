@@ -1,9 +1,11 @@
 package main
 
 import (
+	//"afg/jwtauth/service"
 	"afg/jwtauth/service"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -36,11 +38,12 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, "Please provide valid login details")
 		return
 	}
-	token, err := service.CreateJwtHmacString("HS256", service.Payload{UserId: "user1"}, "key")
-	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, err.Error())
-		return
-	}
+
+	aPayload := service.Payload{UserId: "user1", TokenId: "1", ExpTime: int64((time.Minute * 10).Seconds())}
+	rPayload := service.Payload{UserId: "user1", TokenId: "2", ExpTime: int64((time.Hour * 1).Seconds())}
+
+	token := service.GenDoubleToken("HS256", "HS256", aPayload, rPayload, "key1", "key2")
+
 	c.JSON(http.StatusOK, token)
 }
 
