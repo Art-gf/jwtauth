@@ -5,12 +5,13 @@ type ErrorMessage struct {
 }
 
 type RegisterRequest struct {
-	Name string `json:"name"`
-	Pass string `json:"password"`
+	Login string `json:"name"`
+	Pass  string `json:"password"`
 }
-type RegisterResponse struct {
-	Guid uint64 `json:"guid"`
-	Name string `json:"name"`
+
+type LoginRequest struct {
+	Login string `json:"name"`
+	Pass  string `json:"password"`
 }
 
 type AuthorizeRequest struct {
