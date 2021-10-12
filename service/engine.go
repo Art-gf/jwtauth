@@ -1,32 +1,46 @@
 package service
 
-// import (
-// 	"context"
-// 	"io"
-// 	"net/http"
-// 	"os"
-// 	"os/signal"
-// 	"time"
+import (
+	tp "afg/jwtauth/templates"
+	"encoding/json"
+	"io/ioutil"
+	"net/http"
+)
 
-// 	"golang.org/x/crypto/acme/autocert"
-// )
+type ServerInstance struct {
+	Mux *http.ServeMux
+}
 
-// type ServerInstance struct {
-// 	Mux http.ServeMux
-// }
+func NewInstance() (s ServerInstance) {
+	s.Mux = http.NewServeMux()
+	return
+}
 
-// func logn(a http.ResponseWriter, b *http.Request) {
-// }
+func (s ServerInstance) Start(addr string) {
+	http.ListenAndServe(addr, s.Mux)
+}
 
-// func out() {
-// 	inst := new(ServerInstance)
+func ToNet(w http.ResponseWriter, i interface{}) {
+	mJ, _ := json.Marshal(i)
+	w.Write(mJ)
+}
 
-// 	inst.Mux.HandleFunc("/login", logn)
+func FromNet(r *http.Request, w http.ResponseWriter, i interface{}) error {
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		MessResp(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
+		return err
+	}
+	err = json.Unmarshal(b, i)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		MessResp(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
+	}
+	return err
+}
 
-// 	mux := http.NewServeMux()
-
-// 	mux.HandleFunc("/login", logn)
-
-// 	http.ListenAndServe(":8080", mux)
-
-// }
+func MessResp(w http.ResponseWriter, status int, msg string) {
+	w.WriteHeader(status)
+	ToNet(w, tp.ErrorMessage{Message: msg})
+}
