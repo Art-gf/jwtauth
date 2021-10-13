@@ -3,7 +3,7 @@ package service
 // JSON templates
 
 type ErrorMessage struct {
-	Message string `json:"Message"`
+	Message string `json:"message"`
 }
 
 type RegisterRequest struct {
