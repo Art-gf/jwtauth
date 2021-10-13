@@ -1,7 +1,7 @@
 # jwtauth
 Authorization server with mongoDB
 
-Contain 4 paths with usimg POST:
+Contain 4 paths with using POST:
 >/register
 >
 >/login
