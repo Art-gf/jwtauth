@@ -1,7 +1,8 @@
 package service
 
+// Server engine
+
 import (
-	tp "afg/jwtauth/templates"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -16,15 +17,18 @@ func NewInstance() (s ServerInstance) {
 	return
 }
 
-func (s ServerInstance) Start(addr string) {
-	http.ListenAndServe(addr, s.Mux)
+func (s ServerInstance) Start(addr string) error {
+	return http.ListenAndServe(addr, s.Mux)
 }
 
-func ToNet(w http.ResponseWriter, i interface{}) {
+// response JSON
+func ToNet(w http.ResponseWriter, status int, i interface{}) {
 	mJ, _ := json.Marshal(i)
+	w.WriteHeader(http.StatusOK)
 	w.Write(mJ)
 }
 
+// request JSON
 func FromNet(r *http.Request, w http.ResponseWriter, i interface{}) error {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -40,7 +44,7 @@ func FromNet(r *http.Request, w http.ResponseWriter, i interface{}) error {
 	return err
 }
 
+// simple message
 func MessResp(w http.ResponseWriter, status int, msg string) {
-	w.WriteHeader(status)
-	ToNet(w, tp.ErrorMessage{Message: msg})
+	ToNet(w, status, ErrorMessage{Message: msg})
 }

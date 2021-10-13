@@ -1,5 +1,7 @@
 package service
 
+// User engine. User created with type bson for mongodb using
+
 import (
 	"crypto/hmac"
 	"crypto/sha512"
@@ -7,6 +9,22 @@ import (
 
 	"github.com/google/uuid"
 )
+
+type User struct {
+	Login       string `bson:"login,omitempty"`
+	Guid        string `bson:"guid,omitempty"`
+	UserHash    string `bson:"userhash,omitempty"`
+	RefreshHash string `bson:"refhash,omitempty"`
+}
+
+func NewUser(login, pass, key string) User {
+	return User{
+		Login:       login,
+		Guid:        CreateGuid(),
+		UserHash:    MakeUserHash(login, pass, key),
+		RefreshHash: "empty",
+	}
+}
 
 func CreateGuid() string {
 	u, _ := uuid.NewUUID()

@@ -1,4 +1,6 @@
-package templates
+package service
+
+// JSON templates
 
 type ErrorMessage struct {
 	Message string `json:"Message"`
@@ -14,27 +16,26 @@ type LoginRequest struct {
 	Pass  string `json:"password"`
 }
 
-type AuthorizeRequest struct {
-	Guid uint64 `json:"guid"`
+type LoginResponse struct {
+	Guid string `json:"guid"`
 }
+
+type AuthorizeRequest struct {
+	Guid string `json:"guid"`
+}
+
 type AuthorizeResponse struct {
 	AccessToken  string `json:"access"`
 	RefreshToken string `json:"refresh"`
-}
-
-type SecuredRequest struct {
-	AccessToken string `json:"access"`
-}
-type SecureResponse struct {
-	ExpTime string `json:"tokenLeftTime"`
 }
 
 type RefreshRequest struct {
 	AccessToken  string `json:"access"`
 	RefreshToken string `json:"refresh"`
 }
+
 type RefreshResponse struct {
+	Message      string `json:"message"`
 	AccessToken  string `json:"access"`
 	RefreshToken string `json:"refresh"`
-	Message      string
 }

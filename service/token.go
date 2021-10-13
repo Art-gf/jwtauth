@@ -1,5 +1,7 @@
 package service
 
+// Token engine
+
 import (
 	"crypto/hmac"
 	"crypto/sha512"
@@ -8,6 +10,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type TokenHeader struct {
@@ -36,6 +40,10 @@ func (c *AccessToken) ReturnString() string {
 	return c.AccessHeader.ReturnString() + "." + c.AccessPayload.ReturnString() + "." + c.AccessSignature
 }
 
+func (c *RefreshToken) ReturnString() string {
+	return c.RefreshPayload.ReturnString() + "." + c.AccessSignature + "." + c.RefreshSignature
+}
+
 func (h *TokenHeader) ReturnString() string {
 	hJ, _ := json.Marshal(h)
 	return base64.RawURLEncoding.EncodeToString(hJ)
@@ -53,6 +61,8 @@ func GenSignature(data, key string) string {
 }
 
 func GenAccessToken(hT TokenHeader, pT TokenPayload, key string) (c AccessToken) {
+	c.AccessHeader = hT
+	c.AccessPayload = pT
 	c.AccessSignature = GenSignature(hT.ReturnString()+"."+pT.ReturnString(), key)
 	return
 }
@@ -85,18 +95,13 @@ func SplitToken(token string) (s []string, err error) {
 }
 
 func CheckAccessToken(s []string, key string) (b bool, err error) {
-	userToken := AccessToken{}
-
-	if DecodeString(s[0], &userToken.AccessHeader) != nil {
-		return false, errors.New("header access reading error")
+	if s[2] != GenSignature(s[0]+"."+s[1], key) {
+		return false, errors.New("unvalid access token ")
 	}
 
+	userToken := AccessToken{}
 	if DecodeString(s[1], &userToken.AccessPayload) != nil {
 		return false, errors.New("payload access reading error")
-	}
-
-	if s[2] != GenSignature(userToken.AccessHeader.ReturnString()+"."+userToken.AccessPayload.ReturnString(), key) {
-		return false, errors.New("unvalid access token")
 	}
 
 	if userToken.AccessPayload.ExpTime <= time.Now().Unix() {
@@ -125,4 +130,16 @@ func CheckRefreshToken(sA, sR []string, key string) (b bool, err error) {
 	}
 
 	return true, nil
+}
+
+func BcryptHash(data string) string {
+	bh, err := bcrypt.GenerateFromPassword([]byte(data), bcrypt.DefaultCost)
+	if err != nil {
+		return "error"
+	}
+	return string(bh)
+}
+
+func BcryptCompare(data, hash string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(data)) == nil
 }
