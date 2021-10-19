@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-type ErrorMessage struct {
-	Message string `json:"Message"`
-}
-
 var storage db.MongoDB
 var CFG sv.ConfigService
 
@@ -50,12 +46,11 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	// register new user and write to database
 	newUser := sv.NewUser(requestMessage.Login, requestMessage.Pass, CFG.SECRET_KEY)
 	ctx := context.TODO()
-	if storage.FindDoc(CFG.DB_COLL, ctx, sv.User{Login: newUser.Login}) {
+	if storage.FindDoc(CFG.DB_COLL, ctx, sv.User{Login: newUser.Login}) == nil {
 		sv.MessResp(w, http.StatusNotAcceptable, "This user already exist")
 		return
 	}
 	storage.WriteDoc(CFG.DB_COLL, ctx, newUser)
-
 	sv.MessResp(w, http.StatusOK, "User registered")
 }
 
@@ -66,18 +61,16 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// find user on database and read information for response user guid
-	ctx := context.TODO()
-	if !storage.FindDoc(CFG.DB_COLL, ctx, sv.User{Login: requestMessage.Login}) {
+	regUser := sv.User{Login: requestMessage.Login}
+	if findUser(&regUser) != nil {
 		sv.MessResp(w, http.StatusNotAcceptable, "This user login not registered")
 		return
 	}
-	regUser := sv.User{Login: requestMessage.Login}
-	storage.ReadDoc(CFG.DB_COLL, ctx, regUser, &regUser)
+	// check password
 	if !sv.CheckUserHash(regUser.UserHash, requestMessage.Login, requestMessage.Pass, CFG.SECRET_KEY) {
 		sv.MessResp(w, http.StatusNotAcceptable, "Incorrect password")
 		return
 	}
-
 	sv.ToNet(w, http.StatusOK, sv.LoginResponse{Guid: regUser.Guid})
 }
 
@@ -87,23 +80,18 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 	if sv.FromNet(r, w, &requestMessage) != nil {
 		return
 	}
-	// find user on database and read information for generate token payload
-	ctx := context.TODO()
-	if !storage.FindDoc(CFG.DB_COLL, ctx, sv.User{Guid: requestMessage.Guid}) {
+	regUser := sv.User{Guid: requestMessage.Guid}
+	if findUser(&regUser) != nil {
 		sv.MessResp(w, http.StatusNotAcceptable, "This user guid not registered")
 		return
 	}
-	regUser := sv.User{Guid: requestMessage.Guid}
-	storage.ReadDoc(CFG.DB_COLL, ctx, regUser, &regUser)
 	// generate access and refresh token
-	accessToken := sv.GenAccessToken(sv.TokenHeader{Type: "JWT", Alg: "HS512"}, sv.TokenPayload{Guid: regUser.Guid, ExpTime: time.Now().Add(time.Minute * time.Duration(CFG.ACCESS_EXP)).Unix()}, CFG.SECRET_KEY)
-	refreshToken := accessToken.GenRefreshToken(sv.TokenPayload{Guid: regUser.Guid, ExpTime: time.Now().Add(time.Minute * time.Duration(CFG.REFRESH_EXP)).Unix()}, CFG.SECRET_KEY)
-	if !storage.UpdateDoc(CFG.DB_COLL, ctx, sv.User{Guid: requestMessage.Guid}, sv.User{RefreshHash: sv.BcryptHash(refreshToken.ReturnString())}) {
+	accessToken, refreshToken, err := genToken(regUser)
+	if err != nil {
 		sv.MessResp(w, http.StatusInternalServerError, "Cant register token on server")
 		return
 	}
-
-	sv.ToNet(w, http.StatusOK, sv.AuthorizeResponse{AccessToken: accessToken.ReturnString(), RefreshToken: refreshToken.ReturnString()})
+	sv.ToNet(w, http.StatusOK, sv.AuthorizeResponse{AccessToken: accessToken, RefreshToken: refreshToken})
 }
 
 func Refresh(w http.ResponseWriter, r *http.Request) {
@@ -112,49 +100,24 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 	if sv.FromNet(r, w, &dataUser) != nil {
 		return
 	}
-	// split token
-	splitAt, err := sv.SplitToken(dataUser.AccessToken)
-	if err != nil {
-		sv.MessResp(w, http.StatusInternalServerError, "Unsupported access token structure")
-		return
-	}
-	splitRt, err := sv.SplitToken(dataUser.RefreshToken)
-	if err != nil {
-		sv.MessResp(w, http.StatusInternalServerError, "Unsupported refresh token structure")
-		return
-	}
 	// check token
-	statusAt, err := sv.CheckAccessToken(splitAt, CFG.SECRET_KEY)
+	payloadAt, statusAt, err := sv.CheckAccessToken(dataUser.AccessToken, CFG.SECRET_KEY)
 	if err != nil {
 		sv.MessResp(w, http.StatusUnprocessableEntity, "Error "+err.Error())
 		return
 	}
-	statusRt, err := sv.CheckRefreshToken(splitAt, splitRt, CFG.SECRET_KEY)
+	payloadRt, statusRt, err := sv.CheckRefreshToken(dataUser.AccessToken, dataUser.RefreshToken, CFG.SECRET_KEY)
 	if err != nil {
 		sv.MessResp(w, http.StatusUnprocessableEntity, "Error "+err.Error())
-		return
-	}
-	// read payload info
-	payloadAt := sv.TokenPayload{}
-	err = sv.DecodeString(splitAt[1], &payloadAt)
-	if err != nil {
-		sv.MessResp(w, http.StatusInternalServerError, "Error decode access expiration time")
-		return
-	}
-	payloadRt := sv.TokenPayload{}
-	err = sv.DecodeString(splitRt[0], &payloadRt)
-	if err != nil {
-		sv.MessResp(w, http.StatusInternalServerError, "Error decode refresh expiration time")
 		return
 	}
 	// find user guid in database from payload info
-	ctx := context.TODO()
-	if !storage.FindDoc(CFG.DB_COLL, ctx, sv.User{Guid: payloadAt.Guid}) {
+	regUser := sv.User{Guid: payloadAt.Guid}
+	if findUser(&regUser) != nil {
 		sv.MessResp(w, http.StatusNotAcceptable, "This user guid on token info is not found")
 		return
 	}
-	regUser := sv.User{Guid: payloadAt.Guid}
-	storage.ReadDoc(CFG.DB_COLL, ctx, regUser, &regUser)
+	// check refresh token on db
 	if !sv.BcryptCompare(dataUser.RefreshToken, regUser.RefreshHash) {
 		sv.MessResp(w, http.StatusNotAcceptable, "Unregistered token")
 		return
@@ -171,17 +134,17 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	// if access token expired but refresh token valid - generate new access and refresh tokens
 	if !statusAt && statusRt {
-		accessToken := sv.GenAccessToken(sv.TokenHeader{Type: "JWT", Alg: "HS512"}, sv.TokenPayload{Guid: regUser.Guid, ExpTime: time.Now().Add(time.Minute * time.Duration(CFG.ACCESS_EXP)).Unix()}, CFG.SECRET_KEY)
-		refreshToken := accessToken.GenRefreshToken(sv.TokenPayload{Guid: regUser.Guid, ExpTime: time.Now().Add(time.Minute * time.Duration(CFG.REFRESH_EXP)).Unix()}, CFG.SECRET_KEY)
-		if !storage.UpdateDoc(CFG.DB_COLL, ctx, sv.User{Guid: payloadAt.Guid}, sv.User{RefreshHash: sv.BcryptHash(refreshToken.ReturnString())}) {
+		// generate access and refresh token
+		accessToken, refreshToken, err := genToken(regUser)
+		if err != nil {
 			sv.MessResp(w, http.StatusInternalServerError, "Cant register token on server")
 			return
 		}
 
 		sv.ToNet(w, http.StatusOK, sv.RefreshResponse{
 			Message:      "Token updated",
-			AccessToken:  accessToken.ReturnString(),
-			RefreshToken: refreshToken.ReturnString(),
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
 		})
 		return
 	}
@@ -200,4 +163,21 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		AccessToken:  "-",
 		RefreshToken: "-",
 	})
+}
+
+func genToken(u sv.User) (at, rt string, err error) {
+	ctx := context.TODO()
+	accessToken := sv.GenAccessToken(sv.TokenPayload{Guid: u.Guid, ExpTime: sv.PayloadMinute(CFG.ACCESS_EXP)}, CFG.SECRET_KEY)
+	refreshToken := accessToken.GenRefreshToken(sv.TokenPayload{Guid: u.Guid, ExpTime: sv.PayloadMinute(CFG.REFRESH_EXP)}, CFG.SECRET_KEY)
+	err = storage.UpdateDoc(CFG.DB_COLL, ctx, sv.User{Guid: u.Guid}, sv.User{RefreshHash: sv.BcryptHash(refreshToken.ReturnString())})
+	return accessToken.ReturnString(), refreshToken.ReturnString(), err
+}
+
+func findUser(u interface{}) error {
+	ctx := context.TODO()
+	if err := storage.FindDoc(CFG.DB_COLL, ctx, u); err != nil {
+		return err
+	}
+	storage.ReadDoc(CFG.DB_COLL, ctx, u, u)
+	return nil
 }
