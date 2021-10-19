@@ -44,4 +44,4 @@ and response JWT tokens:
 }
 and response, if need refresh or not, or refresh token is expired
 
-Config .json must be contained in ine dir with executable file
+Config .json must be contained in dir with executable file
