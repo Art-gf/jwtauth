@@ -36,8 +36,8 @@ func (db *MongoDB) OpenCollection(c string) {
 	db.Collections[c] = db.database.Collection(c)
 }
 
-func (db *MongoDB) FindDoc(c string, ctx context.Context, filter interface{}) bool {
-	return db.Collections[c].FindOne(ctx, filter).Err() == nil
+func (db *MongoDB) FindDoc(c string, ctx context.Context, filter interface{}) error {
+	return db.Collections[c].FindOne(ctx, filter).Err()
 }
 
 func (db *MongoDB) ReadDoc(c string, ctx context.Context, filter interface{}, target interface{}) {
@@ -51,7 +51,7 @@ func (db *MongoDB) WriteDoc(c string, ctx context.Context, doc interface{}) {
 	db.Collections[c].InsertOne(ctx, doc)
 }
 
-func (db *MongoDB) UpdateDoc(c string, ctx context.Context, filter interface{}, doc interface{}) bool {
+func (db *MongoDB) UpdateDoc(c string, ctx context.Context, filter interface{}, doc interface{}) error {
 	_, err := db.Collections[c].UpdateOne(ctx, filter, bson.M{"$set": doc})
-	return err == nil
+	return err
 }

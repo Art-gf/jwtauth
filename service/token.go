@@ -60,10 +60,10 @@ func GenSignature(data, key string) string {
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
-func GenAccessToken(hT TokenHeader, pT TokenPayload, key string) (c AccessToken) {
-	c.AccessHeader = hT
+func GenAccessToken(pT TokenPayload, key string) (c AccessToken) {
+	c.AccessHeader = TokenHeader{Type: "JWT", Alg: "HS512"}
 	c.AccessPayload = pT
-	c.AccessSignature = GenSignature(hT.ReturnString()+"."+pT.ReturnString(), key)
+	c.AccessSignature = GenSignature(c.AccessHeader.ReturnString()+"."+pT.ReturnString(), key)
 	return
 }
 
@@ -94,42 +94,56 @@ func SplitToken(token string) (s []string, err error) {
 	}
 }
 
-func CheckAccessToken(s []string, key string) (b bool, err error) {
-	if s[2] != GenSignature(s[0]+"."+s[1], key) {
-		return false, errors.New("unvalid access token ")
-	}
-
+func CheckAccessToken(t string, key string) (pl TokenPayload, exp bool, err error) {
 	userToken := AccessToken{}
+	s, err := SplitToken(t)
+	if err != nil {
+		return
+	}
+	if s[2] != GenSignature(s[0]+"."+s[1], key) {
+		err = errors.New("unvalid access token ")
+		return
+	}
 	if DecodeString(s[1], &userToken.AccessPayload) != nil {
-		return false, errors.New("payload access reading error")
+		err = errors.New("payload access reading error")
+		return
 	}
-
+	pl = userToken.AccessPayload
 	if userToken.AccessPayload.ExpTime <= time.Now().Unix() {
-		return false, nil
+		return
 	}
-
-	return true, nil
+	exp = true
+	return
 }
 
-func CheckRefreshToken(sA, sR []string, key string) (b bool, err error) {
+func CheckRefreshToken(tA, tR string, key string) (pl TokenPayload, exp bool, err error) {
 	userToken := RefreshToken{}
+	sA, err := SplitToken(tA)
+	if err != nil {
+		return
+	}
+	sR, err := SplitToken(tR)
+	if err != nil {
+		return
+	}
 	if DecodeString(sR[0], &userToken.RefreshPayload) != nil {
-		return false, errors.New("payload refresh reading error")
+		err = errors.New("payload refresh reading error")
+		return
 	}
-
 	if sA[2] != sR[1] {
-		return false, errors.New("unvalid refresh token")
+		err = errors.New("unvalid refresh token")
+		return
 	}
-
 	if sR[2] != GenSignature(userToken.RefreshPayload.ReturnString()+"."+sA[2], key) {
-		return false, errors.New("unvalid refresh token")
+		err = errors.New("unvalid refresh token")
+		return
 	}
-
+	pl = userToken.RefreshPayload
 	if userToken.RefreshPayload.ExpTime <= time.Now().Unix() {
-		return false, nil
+		return
 	}
-
-	return true, nil
+	exp = true
+	return
 }
 
 func BcryptHash(data string) string {
@@ -142,4 +156,8 @@ func BcryptHash(data string) string {
 
 func BcryptCompare(data, hash string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(data)) == nil
+}
+
+func PayloadMinute(m int) int64 {
+	return time.Now().Add(time.Minute * time.Duration(m)).Unix()
 }

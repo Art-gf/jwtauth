@@ -1,9 +1,0 @@
-{
-    "server_uri": ":8080",
-    "db_uri": "mongodb://localhost:27017/",
-    "db_name": "authorize",
-    "db_collections": "users",
-    "jwt_access_exp": 5, 
-    "jwt_refresh_exp": 10, 
-    "secret_key": "key"
-}
